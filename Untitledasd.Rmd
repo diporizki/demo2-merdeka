@@ -1,0 +1,188 @@
+---
+title: "TUJUH BUKIT DRILLING PROGRESS MONITORING DASHBOARD"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    favicon: /Users/diporizki/Downloads/logo merdeka2.jpeg
+    theme:
+      version: 4
+      bg: "#101010"
+      fg: "#FDF7F7"
+      primary: "#f3a861"
+      navbar-bg: "#f3a861"
+---
+
+```{r setup, include=FALSE}
+# dasar library
+library(flexdashboard)
+library(leaflet.extras)
+library(shiny)
+library(dplyr)
+library(rayshader)
+library(raster)
+library(elevatr)
+library(rgdal)
+
+# package for data wrangling & vis
+library(glue)
+library(scales)
+
+# package for spatial environment in R
+library(sp)
+library(sf)
+
+# package for visualization
+library(leaflet)
+library(plotly)
+library(RColorBrewer)
+
+collars = st_read(dsn = "new folder", layer = "collars12345")
+
+collars_sf = st_as_sf(collars, coords = c("X", "Y"), crs = 32750)
+
+lith <- read.csv("combine_gb_lith_gtd15_18.csv")
+
+collars2 <- lith %>% merge(collars_sf, by = c("site_id" = "site_id"))
+
+assays <- read.csv("combine_gb_assays_gtd15_18.csv")
+
+collars3 <- assays %>% merge(collars2, by = c("site_id" = "site_id"))
+
+head(collars3)
+```
+
+Progres Drilling Proyek Tujuh Bukit - PT Merdeka Copper Gold Tbk.
+=======================================================================
+
+Column {data-width=750}
+-----------------------------------------------------------------------
+
+### WebGIS
+```{r}
+
+pal = colorFactor(palette = "RdBu", domain = collars2$zonearea)
+
+labels = glue::glue("<b>ID Tambang: {collars2$site_id}</b>
+                    <br>Status Penambangan: {(collars2$hole_statu)}</b>
+                    <br>Elevasi: {scales::comma(collars2$height, accuracy = 1)} m
+                    <br>Koordinat: {(collars2$easting)}, {(collars2$northing)} UTM
+                    <br>Zona Area: <b>{(collars2$zonearea)}</b>
+                    <br>Tanggal Penambangan: <b>{(collars2$logged_date)}</b>
+                    <br>ID Rig: {(collars2$rigid)}</br>
+                    <br><b>Jenis Batu:</b>
+                    <br>Dari {(collars2$depth_from[2])} m ke {(collars2$depth_to[2])} m = <b>{(collars2$rocktype[2])}</b>
+                    <br>Dari {(collars2$depth_from)} m ke {(collars2$depth_to)} m = <b>{(collars2$rocktype)}</b>
+                    <br>Dari {(collars2$depth_from[22])} m ke {(collars2$depth_to[22])} m = <b>{(collars2$rocktype[22])}</br>
+                    <br><b>Kedalaman:</b>
+                    </b><br>Rencana: {(collars2$planneddep)} m
+                    <br>Aktual: {(collars2$end_depth)} m") %>% lapply(htmltools::HTML)
+
+leaflet(collars2) %>%
+  addProviderTiles(providers$Esri.WorldImagery) %>% 
+  addCircles(
+    lng = ~longitude,
+    lat = ~lattitude,
+    label = labels,
+    labelOptions = labelOptions(
+      style = list("font-size"="13px", "background-color"="black", "color"="white")
+    ),
+    weight = 2, 
+    color = "lawngreen", 
+    fillOpacity = .8, 
+    fillColor = ~pal(zonearea),
+    highlight = highlightOptions(
+      weight = 5,
+      color = "green",
+      sendToBack = TRUE,
+      opacity = 0.1
+    )
+  ) %>%
+  addLegend(
+    pal = pal,
+    values = ~zonearea,
+    opacity = 1,
+    title = "Zona Area",
+    position = "bottomright"
+  )
+
+# planned depth dan actual depth masukin - done
+# tipe rig - done
+# koordinat convert ke utm - done
+# jabarkan litlogi per meter kedalaman setiap collar - progress
+```
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+### Graph
+
+```{r}
+ggplot(collars2, 
+       aes(x = zonearea, 
+           fill = lith)) + 
+  geom_bar(position = "stack")
+```
+
+### Graph 2
+
+```{r}
+ggplot(collars2, 
+       aes(x = zonearea, 
+           fill = rocktype)) + 
+  geom_bar(position = "fill") +
+  labs(y = "Proportion")
+```
+
+3D
+=======================================================================
+
+Column {data-width=750}
+-----------------------------------------------------------------------
+
+### 3D
+```{r}
+## loadzip = tempfile() 
+##download.file("https://tylermw.com/data/dem_01.tif.zip", loadzip)
+##localtif = raster::raster(unzip(loadzip, "dem_01.tif"))
+##unlink(loadzip)
+
+collars_raster = raster(paste0("DEMNAS_1707-14_v1.0.tif"))
+
+#And convert it to a matrix:
+collars_raster2 = raster_to_matrix(collars_raster)
+
+#We use another one of rayshader's built-in textures:
+collars_raster2 %>%
+  sphere_shade(texture = "unicorn") %>%
+  add_water(detect_water(collars_raster2), color = "desert") %>%
+  plot_map()
+```
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+### 3d 2
+```{r}
+## co_elev <- get_elev_raster(collars2, z = 6)
+
+## co_mat <- raster_to_matrix(co_elev)
+
+## co_mat %>%
+  ## sphere_shade(texture = 'desert') %>%
+  ## add_shadow(ray_shade(co_mat, zscale = 20)) %%
+```
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+### 3d 2
+```{r}
+## co_elev <- get_elev_raster(collars2, z = 6)
+
+## co_mat <- raster_to_matrix(co_elev)
+
+## co_mat %>%
+  ## sphere_shade(texture = 'desert') %>%
+  ## add_shadow(ray_shade(co_mat, zscale = 20)) %%
+```
