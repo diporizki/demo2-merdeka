@@ -23,6 +23,7 @@ library(rayshader)
 library(raster)
 library(elevatr)
 library(rgdal)
+library(magick)
 
 # package for data wrangling & vis
 library(glue)
@@ -52,13 +53,12 @@ collars3 <- assays %>% merge(collars2, by = c("site_id" = "site_id"))
 head(collars3)
 ```
 
-Progres Drilling Proyek Tujuh Bukit - PT Merdeka Copper Gold Tbk.
-=======================================================================
+# Progres Drilling Proyek Tujuh Bukit - PT Merdeka Copper Gold Tbk.
 
-Column {data-width=750}
------------------------------------------------------------------------
+## Column {data-width="750"}
 
 ### WebGIS
+
 ```{r}
 
 pal = colorFactor(palette = "RdBu", domain = collars2$zonearea)
@@ -112,8 +112,7 @@ leaflet(collars2) %>%
 # jabarkan litlogi per meter kedalaman setiap collar - progress
 ```
 
-Column {data-width=250}
------------------------------------------------------------------------
+## Column {data-width="250"}
 
 ### Graph
 
@@ -134,35 +133,44 @@ ggplot(collars2,
   labs(y = "Proportion")
 ```
 
-3D
-=======================================================================
+# 3D
 
-Column {data-width=750}
------------------------------------------------------------------------
+## Column {data-width="750"}
 
 ### 3D
+
 ```{r}
 ## loadzip = tempfile() 
 ##download.file("https://tylermw.com/data/dem_01.tif.zip", loadzip)
 ##localtif = raster::raster(unzip(loadzip, "dem_01.tif"))
 ##unlink(loadzip)
 
-collars_raster = raster(paste0("DEMNAS_1707-14_v1.0.tif"))
+collars_raster = raster(paste0("tes.tif"))
+
+collars_elev = get_elev_raster(collars_raster, z = 3)
 
 #And convert it to a matrix:
-collars_raster2 = raster_to_matrix(collars_raster)
+collars_raster2 = raster_to_matrix(collars_elev)
 
 #We use another one of rayshader's built-in textures:
 collars_raster2 %>%
   sphere_shade(texture = "unicorn") %>%
   add_water(detect_water(collars_raster2), color = "desert") %>%
-  plot_map()
+  plot_3d(collars_raster2, zscale = 60)
+
+rgl::rglwidget()
+
+#render
+
+##render_label(collars_raster2,
+            ## text = 'raster',
+             ##lat = )
 ```
 
-Column {data-width=250}
------------------------------------------------------------------------
+## Column {data-width="250"}
 
 ### 3d 2
+
 ```{r}
 ## co_elev <- get_elev_raster(collars2, z = 6)
 
@@ -173,10 +181,10 @@ Column {data-width=250}
   ## add_shadow(ray_shade(co_mat, zscale = 20)) %%
 ```
 
-Column {data-width=250}
------------------------------------------------------------------------
+## Column {data-width="250"}
 
 ### 3d 2
+
 ```{r}
 ## co_elev <- get_elev_raster(collars2, z = 6)
 
