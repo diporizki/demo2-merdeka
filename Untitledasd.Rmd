@@ -24,6 +24,10 @@ library(raster)
 library(elevatr)
 library(rgdal)
 library(magick)
+library(osmdata)
+library(tidyverse)
+library(assertthat)
+library(rglwidget)
 
 # package for data wrangling & vis
 library(glue)
@@ -38,9 +42,15 @@ library(leaflet)
 library(plotly)
 library(RColorBrewer)
 
+## Setup
+
 collars = st_read(dsn = "new folder", layer = "collars12345")
 
 collars_sf = st_as_sf(collars, coords = c("X", "Y"), crs = 32750)
+
+collars_sp = as_Spatial(collars_sf)
+
+collars_rg = readOGR("new folder", "collars12345")
 
 lith <- read.csv("combine_gb_lith_gtd15_18.csv")
 
@@ -50,7 +60,46 @@ assays <- read.csv("combine_gb_assays_gtd15_18.csv")
 
 collars3 <- assays %>% merge(collars2, by = c("site_id" = "site_id"))
 
-head(collars3)
+## 3D Setup
+
+raster2 = raster("tes3.tif")
+
+lat_range = c(-8.61330, -8.61658)
+long_range = c(114.0419, 114.0478)
+
+convert_coords = function(lat, long, from = CRS("+init=epsg:4979"), to ) {
+  data = data.frame(long=long, lat=lat)
+  coordinates(data) <- ~ long+lat
+  proj4string(data) = from
+  xy = data.frame(sp::spTransform(data, to))
+  colnames(xy) = c("X", "Y")
+  return(unlist(xy))
+}
+crs(raster2)
+
+utm_bbox = convert_coords(lat = lat_range,
+                          long = long_range,
+                          to = crs(raster2))
+utm_bbox
+
+extent_raster2 = extent(utm_bbox[1],
+                        utm_bbox[2],
+                        utm_bbox[4],
+                        utm_bbox[3])
+raster2_zoom = crop(raster2, extent_raster2)
+raster2_zoom_mat = raster_to_matrix(raster2_zoom)
+
+## 
+
+osm_bbox = c(long_range[1],
+             lat_range[1],
+             long_range[2],
+             lat_range[2])
+raster2_points = opq(osm_bbox) %>%
+  add_osm_feature("highway") %>%
+  osmdata_sf()
+
+raster2_points2 = st_transform(raster2_points$osm_points, crs = crs(raster2))
 ```
 
 # Progres Drilling Proyek Tujuh Bukit - PT Merdeka Copper Gold Tbk.
@@ -133,6 +182,14 @@ ggplot(collars2,
   labs(y = "Proportion")
 ```
 
+```{R}
+##raster_collars = rasterize(x = collars, y = collars2, field = 1)
+```
+
+```{R}
+
+```
+
 # 3D
 
 ## Column {data-width="750"}
@@ -140,14 +197,69 @@ ggplot(collars2,
 ### 3D
 
 ```{r}
-## loadzip = tempfile() 
-##download.file("https://tylermw.com/data/dem_01.tif.zip", loadzip)
-##localtif = raster::raster(unzip(loadzip, "dem_01.tif"))
-##unlink(loadzip)
+raster2 = raster("tes3.tif")
+raster2_mat = raster_to_matrix(raster2)
+raster2_small = resize_matrix(raster2_mat, 0.25)
 
-collars_raster = raster(paste0("tes.tif"))
+base_map = raster2_small %>%
+  height_shade() %>%
+  add_overlay(sphere_shade(raster2_small,
+                           texture = "imhof1",
+                           zscale = 100,
+                           colorintensity = 5,
+                           )) %>%
+  add_shadow(lamb_shade(raster2_small,
+                        zscale = 100), 0) %>%
+  add_shadow(ambient_shade(raster2_small), 0) %>%
+  add_shadow(texture_shade(raster2_small,
+                           detail = 8/10,
+                           brightness = 11), 0.1)
 
-collars_elev = get_elev_raster(collars_raster, z = 3)
+base_map2 = base_map %>%
+  add_overlay(generate_point_overlay(raster2_points2,
+                                     extent = extent_raster2,
+                                     heightmap = raster2_small))
+plot_map(base_map2)
+
+#base_map2 %>%
+  #plot_3d(raster2_zoom_mat,
+        #  windowsize = c(1200, 800),
+         # theta = 40,
+         # phi = 50,
+         # zoom= 0.5,
+          #fov = 90)
+
+```
+### 3d2
+
+```{r}
+base_map2 %>%
+  plot_3d(raster2_small,
+        windowsize = c(1200, 800),
+         theta = 40,
+         phi = 50,
+         zoom= 0.5,
+          fov = 90)
+rglwidget(width = 1,
+          height = 1,
+          controllers = NULL,
+          elementId = NULL,
+          reuse = FALSE,
+          webGLoptions = list(preserveDrawingBuffer = TRUE),
+          shared = NULL,
+          minimal = TRUE,
+          )
+```
+
+
+## Column {data-width="250"}
+
+### 3d 2
+
+```{r}
+collars_raster = raster(paste0("tes2.tif"))
+
+collars_elev = get_elev_raster(collars_raster, z = 6)
 
 #And convert it to a matrix:
 collars_raster2 = raster_to_matrix(collars_elev)
@@ -156,10 +268,20 @@ collars_raster2 = raster_to_matrix(collars_elev)
 collars_raster2 %>%
   sphere_shade(texture = "unicorn") %>%
   add_water(detect_water(collars_raster2), color = "desert") %>%
-  plot_3d(collars_raster2, zscale = 60)
-
-rgl::rglwidget()
-
+  plot_3d(collars_raster2, 
+          zscale = 40,
+          fov = 30,
+          theta = 20,
+          windowsize = c(800, 1000),
+          zoom = 0.3,
+          )
+##render_points(extent = attr(collars_raster2,"extent"),
+              #lat = unlist(collars2$lattitude),
+              #long = unlist(collars2$longitude),
+              #zscale = 50,
+              #altitude = z_out,
+              #color = "white")
+render_camera()
 #render
 
 ##render_label(collars_raster2,
@@ -167,8 +289,6 @@ rgl::rglwidget()
              ##lat = )
 ```
 
-## Column {data-width="250"}
-
 ### 3d 2
 
 ```{r}
@@ -179,18 +299,9 @@ rgl::rglwidget()
 ## co_mat %>%
   ## sphere_shade(texture = 'desert') %>%
   ## add_shadow(ray_shade(co_mat, zscale = 20)) %%
-```
 
-## Column {data-width="250"}
-
-### 3d 2
-
-```{r}
-## co_elev <- get_elev_raster(collars2, z = 6)
-
-## co_mat <- raster_to_matrix(co_elev)
-
-## co_mat %>%
-  ## sphere_shade(texture = 'desert') %>%
-  ## add_shadow(ray_shade(co_mat, zscale = 20)) %%
+ggplot(raster2_points2, aes(color=osm_id)) +
+  geom_sf() +
+  theme(legend.position = "none") +
+  labs(title = "titik drill")
 ```
